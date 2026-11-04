@@ -4,6 +4,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
@@ -14,6 +15,7 @@ import net.minecraft.world.item.ItemStack;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
 /** Animation state machine + HUD rendering of the hanging cat. */
 final class CatController {
@@ -80,6 +82,19 @@ final class CatController {
 	private float clock;
 	private long lastNanos;
 
+	// speech
+	private final Random rng = new Random();
+	private String bubble;
+	private float bubbleT;
+	private float bubbleLife;
+	private float speechCooldown;
+	private float fastCooldown;
+	private float hungryTimer;
+	private int hungryStage;
+	private float chatterTimer;
+	private float greetDelay = -1f;
+	private ClientLevel lastLevel;
+
 	CatController(CatConfig cfg) {
 		this.cfg = cfg;
 	}
@@ -89,6 +104,10 @@ final class CatController {
 	void enqueue(Kind kind, String key, int count, ItemStack sample) {
 		if (sample == null || count <= 0) {
 			return;
+		}
+		if (kind == Kind.EAT) {
+			hungryTimer = 0f;
+			hungryStage = 0;
 		}
 		Event last = queue.peekLast();
 		if (last != null && last.kind == kind && last.key.equals(key)) {
@@ -102,6 +121,10 @@ final class CatController {
 			}
 		}
 		queue.addLast(new Event(kind, key, count, sample));
+		if (queue.size() >= 6 && fastCooldown <= 0f) {
+			fastCooldown = 20f;
+			say(CatSpeech.pick(CatSpeech.FAST, rng), true);
+		}
 	}
 
 	private void addLog(Kind kind, String key, int count, ItemStack stack) {
@@ -140,6 +163,7 @@ final class CatController {
 		if (!logged && t >= swallow) {
 			logged = true;
 			addLog(current.kind, current.key, current.count, current.stack);
+			react(current);
 		}
 		float dur = current.kind == Kind.EAT ? EAT_DUR : VOMIT_DUR;
 		if (t >= dur) {
@@ -148,6 +172,134 @@ final class CatController {
 			}
 			current = null;
 		}
+	}
+
+	// ------------------------------------------------------------------ speech
+
+	private static String fmt(String line, Event e) {
+		String name = ChatFormatting.stripFormatting(e.stack.getHoverName().getString());
+		if (name == null || name.isEmpty()) {
+			name = "that";
+		}
+		return line.replace("{item}", name).replace("{count}", Integer.toString(e.count));
+	}
+
+	private void say(String text, boolean force) {
+		if (!cfg.speech) {
+			return;
+		}
+		if (!force && (bubble != null || speechCooldown > 0f)) {
+			return;
+		}
+		bubble = text;
+		bubbleT = 0f;
+		bubbleLife = 3.2f + text.length() * 0.045f;
+		speechCooldown = 5f;
+	}
+
+	private void react(Event e) {
+		if (!cfg.speech) {
+			return;
+		}
+		if (e.kind == Kind.VOMIT) {
+			say(fmt(CatSpeech.pick(CatSpeech.VOMIT, rng), e), true);
+		} else if (e.count >= 32) {
+			say(fmt(CatSpeech.pick(CatSpeech.EAT_BIG, rng), e), true);
+		} else if (rng.nextFloat() < 0.3f) {
+			String[] pool = rng.nextBoolean() ? CatSpeech.EAT_ITEM : CatSpeech.EAT_SHORT;
+			say(fmt(CatSpeech.pick(pool, rng), e), false);
+		}
+	}
+
+	private float nextChatter() {
+		return cfg.chatterSeconds * (0.6f + rng.nextFloat() * 0.8f);
+	}
+
+	private void updateSpeech(float dt, Minecraft mc) {
+		if (!cfg.speech) {
+			bubble = null;
+			return;
+		}
+		if (mc.level != lastLevel) {
+			lastLevel = mc.level;
+			greetDelay = 4f;
+			hungryTimer = 0f;
+			hungryStage = 0;
+			chatterTimer = nextChatter();
+		}
+		speechCooldown = Math.max(0f, speechCooldown - dt);
+		fastCooldown = Math.max(0f, fastCooldown - dt);
+		if (greetDelay > 0f) {
+			greetDelay -= dt;
+			if (greetDelay <= 0f) {
+				say(CatSpeech.pick(CatSpeech.GREET, rng), false);
+			}
+		}
+		if (bubble != null) {
+			bubbleT += dt;
+			if (bubbleT >= bubbleLife) {
+				bubble = null;
+			}
+		}
+		boolean busy = current != null || !queue.isEmpty();
+		if (busy) {
+			return;
+		}
+		hungryTimer += dt;
+		chatterTimer -= dt;
+		if (bubble != null || greetDelay > 0f) {
+			return;
+		}
+		if (hungryTimer >= cfg.hungryAfterSeconds) {
+			say(CatSpeech.HUNGRY[Math.min(hungryStage, CatSpeech.HUNGRY.length - 1)], true);
+			hungryStage++;
+			hungryTimer = 0f;
+			chatterTimer = Math.max(chatterTimer, 20f);
+		} else if (cfg.chatterSeconds > 0f && chatterTimer <= 0f) {
+			say(CatSpeech.pick(CatSpeech.CHATTER, rng), false);
+			chatterTimer = nextChatter();
+		}
+	}
+
+	private void drawBubble(GuiGraphicsExtractor g, Minecraft mc, float pivotX, float pivotY, int s) {
+		if (bubble == null) {
+			return;
+		}
+		float in = Math.min(1f, bubbleT / 0.15f);
+		float out = Math.min(1f, (bubbleLife - bubbleT) / 0.4f);
+		float a = Math.max(0f, Math.min(in, out));
+		int alpha = (int) (a * 255f);
+		if (alpha < 6) {
+			return;
+		}
+		Font font = mc.font;
+		Component text = Component.literal(bubble);
+		int w = font.width(text);
+		int guiW = mc.getWindow().getGuiScaledWidth();
+		int x0 = Math.round(pivotX + (FRAME_W / 2f + 2f) * s) + 5;
+		int y0 = Math.round(pivotY + 8f * s + (1f - in) * 4f);
+		int x1 = x0 + w + 8;
+		int y1 = y0 + font.lineHeight + 8;
+		if (x1 > guiW - 2) {
+			int shift = x1 - (guiW - 2);
+			x0 -= shift;
+			x1 -= shift;
+		}
+		int white = (alpha << 24) | 0xFFFFFF;
+		int line = (alpha << 24) | 0x3B2418;
+		// rounded box: two overlapping rects, outline first
+		g.fill(x0 - 1, y0, x1 + 1, y1, line);
+		g.fill(x0, y0 - 1, x1, y1 + 1, line);
+		g.fill(x0, y0, x1, y1, white);
+		// little tail pointing at the cat
+		int my = (y0 + y1) / 2;
+		for (int i = 0; i < 4; i++) {
+			g.fill(x0 - 2 - i, my - (3 - i) - 1, x0 - i, my + (3 - i) + 2, line);
+		}
+		for (int i = 0; i < 4; i++) {
+			g.fill(x0 - 1 - i, my - (3 - i), x0 - i + 1, my + (3 - i) + 1, white);
+		}
+		g.text(font, text, x0 + 4, y0 + 4, line, false);
 	}
 
 	private int idleFrame() {
@@ -192,6 +344,7 @@ final class CatController {
 		lastNanos = nowNanos;
 		clock += dt;
 		advance(dt);
+		updateSpeech(dt, mc);
 
 		int s = cfg.scale;
 		float pivotX = mc.getWindow().getGuiScaledWidth() / 2f + cfg.offsetX;
@@ -213,6 +366,7 @@ final class CatController {
 		drawFlyingItem(g);
 		pose.popMatrix();
 
+		drawBubble(g, mc, pivotX, pivotY, s);
 		if (cfg.showLog && cfg.logLines > 0) {
 			drawLog(g, mc, pivotX, pivotY + (FRAME_H + 3) * s);
 		}

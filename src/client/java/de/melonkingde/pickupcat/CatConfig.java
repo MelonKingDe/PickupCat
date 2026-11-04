@@ -34,6 +34,12 @@ public final class CatConfig {
 	/** 1.0 = normal. The cat also speeds up on its own when many items are queued. */
 	public float animationSpeed = 1.0f;
 	public int maxQueue = 40;
+	/** Speech bubbles: random reactions and chatter. */
+	public boolean speech = true;
+	/** Seconds without eating before the cat says it is hungry (repeats, getting more dramatic). */
+	public float hungryAfterSeconds = 60f;
+	/** Average seconds between random chatter lines. 0 = no random chatter. */
+	public float chatterSeconds = 75f;
 	/** Items moved into your inventory from chests, sacks, bazaar, auctions... also get eaten. */
 	public boolean eatFromGuis = true;
 
@@ -65,5 +71,7 @@ public final class CatConfig {
 		logSeconds = Math.max(1f, Math.min(30f, logSeconds));
 		animationSpeed = Math.max(0.25f, Math.min(3f, animationSpeed));
 		maxQueue = Math.max(5, Math.min(200, maxQueue));
+		hungryAfterSeconds = Math.max(10f, Math.min(600f, hungryAfterSeconds));
+		chatterSeconds = chatterSeconds <= 0f ? 0f : Math.max(20f, Math.min(600f, chatterSeconds));
 	}
 }
