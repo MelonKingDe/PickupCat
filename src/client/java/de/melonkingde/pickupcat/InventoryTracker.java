@@ -32,6 +32,9 @@ import java.util.Set;
 final class InventoryTracker {
 	private static final int SETTLE_TICKS = 60;      // ignore inventory reloads after world switches
 	private static final int DROP_WINDOW_TICKS = 24; // max delay between inventory change and item entity
+	private static final int MENU_CONFIRM_TICKS = 8; // a change must persist this long while a menu is open
+	private static final int MENU_GRACE_TICKS = 8;   // ...and for this long after the menu closed
+	private static final int CARRY_GRACE_TICKS = 3;  // hold off while/after the cursor carries an item
 	private static final Set<String> VARIANT_IDS = Set.of(
 			"ENCHANTED_BOOK", "PET", "POTION", "RUNE", "UNIQUE_RUNE", "ATTRIBUTE_SHARD", "NEW_BOOK");
 
@@ -62,6 +65,9 @@ final class InventoryTracker {
 	private ClientLevel lastLevel;
 	private int settle;
 	private int tick;
+	private int candidateTicks;
+	private int menuGrace;
+	private int carryGrace;
 
 	InventoryTracker(CatConfig cfg, CatController cat) {
 		this.cfg = cfg;
@@ -98,15 +104,42 @@ final class InventoryTracker {
 			return;
 		}
 
-		// 1-tick debounce: a change must be seen on two consecutive ticks
+		// Clicking items in menus makes the client *predict* changes (cursor stack, shift-click)
+		// that the server then reverts. So: never commit while the cursor holds something, and
+		// require a change to stay stable for much longer while a menu is open (or just closed).
+		boolean inMenu = player.containerMenu != player.inventoryMenu;
+		if (inMenu) {
+			menuGrace = MENU_GRACE_TICKS;
+		} else if (menuGrace > 0) {
+			menuGrace--;
+		}
+		if (!player.containerMenu.getCarried().isEmpty()) {
+			carryGrace = CARRY_GRACE_TICKS;
+		} else if (carryGrace > 0) {
+			carryGrace--;
+		}
+		if (carryGrace > 0) {
+			candidate = null;
+			candidateTicks = 0;
+			matchDrops();
+			return;
+		}
+
+		int needed = menuGrace > 0 ? MENU_CONFIRM_TICKS : 2;
 		if (now.equals(stable)) {
 			candidate = null;
+			candidateTicks = 0;
 		} else if (now.equals(candidate)) {
-			diff(now, player);
-			stable = now;
-			candidate = null;
+			candidateTicks++;
+			if (candidateTicks >= needed - 1) {
+				diff(now, player);
+				stable = now;
+				candidate = null;
+				candidateTicks = 0;
+			}
 		} else {
 			candidate = now;
+			candidateTicks = 0;
 		}
 		matchDrops();
 	}
@@ -114,6 +147,9 @@ final class InventoryTracker {
 	private void reset() {
 		stable = new HashMap<>();
 		candidate = null;
+		candidateTicks = 0;
+		menuGrace = 0;
+		carryGrace = 0;
 		samples.clear();
 		knownEntities.clear();
 		decreases.clear();
@@ -127,8 +163,6 @@ final class InventoryTracker {
 		for (int i = 0; i < size; i++) {
 			add(map, inv.getItem(i));
 		}
-		// the stack on the mouse cursor still belongs to the player
-		add(map, player.containerMenu.getCarried());
 		return map;
 	}
 

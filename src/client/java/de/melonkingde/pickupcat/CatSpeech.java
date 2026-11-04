@@ -56,7 +56,6 @@ final class CatSpeech {
 			"just five more minutes of farming...",
 			"i'm a cat, not a sack",
 			"do you ever wonder who named it the rift?",
-		    "through out heaven and earth, i alone am the farming one",
 	};
 
 	static String pick(String[] lines, Random rng) {

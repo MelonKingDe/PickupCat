@@ -20,7 +20,7 @@ gradle wrapper --gradle-version latest
 ./gradlew build
 ```
 
-Output: `build/libs/pickupcat-1.1.0+26.2.jar` (upload this one; `-sources.jar` is optional).
+Output: `build/libs/pickupcat-1.1.1+26.2.jar` (upload this one; `-sources.jar` is optional).
 Test in-game: `./gradlew runClient`.
 
 ## Config
@@ -48,4 +48,4 @@ Test in-game: `./gradlew runClient`.
 ## Publish to Modrinth
 
 1. Create the project on modrinth.com (icon: `modrinth/icon.png`, description: `modrinth/description.md`, license MIT, client-side only).
-2. Upload `build/libs/pickupcat-1.1.0+26.2.jar` manually, **or** use the included GitHub Action: add the repo variable `MODRINTH_ID` and secret `MODRINTH_TOKEN`, then publish a GitHub release.
+2. Upload `build/libs/pickupcat-1.1.1+26.2.jar` manually, **or** use the included GitHub Action: add the repo variable `MODRINTH_ID` and secret `MODRINTH_TOKEN`, then publish a GitHub release.
