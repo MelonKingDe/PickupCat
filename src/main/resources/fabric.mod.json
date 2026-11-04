@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "pickupcat",
+  "version": "${version}",
+  "name": "Pickup Cat",
+  "description": "A cat hangs from the top of your screen and eats every item you pick up. Drop something and it throws it back up. Built as an item pickup log for Hypixel SkyBlock.",
+  "authors": [
+    "MelonKingDe"
+  ],
+  "contact": {
+    "homepage": "https://modrinth.com/mod/pickupcat",
+    "sources": "https://github.com/MelonKingDe/PickupCat",
+    "issues": "https://github.com/MelonKingDe/PickupCat/issues"
+  },
+  "license": "MIT",
+  "icon": "assets/pickupcat/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "de.melonkingde.pickupcat.PickupCatClient"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.19.3",
+    "minecraft": "~26.2",
+    "java": ">=25",
+    "fabric-api": "*"
+  }
+}
