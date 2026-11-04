@@ -11,18 +11,6 @@ Built for **Hypixel SkyBlock** (items are tracked by their SkyBlock id, so stat/
 
 Requires Minecraft **26.2**, Fabric Loader 0.19.3+, Fabric API, Java 25.
 
-## Build
-
-```bash
-# one-time: create the Gradle wrapper (or copy gradlew + gradle/wrapper/* from FabricMC/fabric-example-mod)
-gradle wrapper --gradle-version latest
-
-./gradlew build
-```
-
-Output: `build/libs/pickupcat-1.1.1+26.2.jar` (upload this one; `-sources.jar` is optional).
-Test in-game: `./gradlew runClient`.
-
 ## Config
 
 `.minecraft/config/pickupcat.json` is created on first launch:
@@ -44,8 +32,3 @@ Test in-game: `./gradlew runClient`.
 ## Art
 
 `python3 tools/generate_cat.py` regenerates `cat.png` (10-frame sprite sheet, 32x44 each) and the icons. You can also just edit the PNG or override it with a resource pack at `assets/pickupcat/textures/gui/cat.png`.
-
-## Publish to Modrinth
-
-1. Create the project on modrinth.com (icon: `modrinth/icon.png`, description: `modrinth/description.md`, license MIT, client-side only).
-2. Upload `build/libs/pickupcat-1.1.1+26.2.jar` manually, **or** use the included GitHub Action: add the repo variable `MODRINTH_ID` and secret `MODRINTH_TOKEN`, then publish a GitHub release.
