@@ -12,18 +12,6 @@ Built for **Hypixel SkyBlock** (items are tracked by their SkyBlock id, so stat/
 
 Requires Minecraft **26.2**, Fabric Loader 0.19.3+, Fabric API, Java 25.
 
-## Build
-
-```bash
-# one-time: create the Gradle wrapper (or copy gradlew + gradle/wrapper/* from FabricMC/fabric-example-mod)
-gradle wrapper --gradle-version latest
-
-./gradlew build
-```
-
-Output: `build/libs/pickupcat-1.3.1+26.2.jar` (upload this one; `-sources.jar` is optional).
-Test in-game: `./gradlew runClient`.
-
 ## Resizing
 
 Press **`]`** to make the cat bigger and **`[`** to make it smaller (steps of 0.25, saved automatically). Both keys can be rebound in *Options > Controls > Key Binds > Pickup Cat*. You can also edit `scale` in `config/pickupcat.json` - changes apply live while the game is running.
@@ -51,11 +39,6 @@ Press **`]`** to make the cat bigger and **`[`** to make it smaller (steps of 0.
 ## Art
 
 `python3 tools/generate_cat.py` regenerates `cat.png` (10-frame sprite sheet, 32x44 each) and the icons. You can also just edit the PNG or override it with a resource pack at `assets/pickupcat/textures/gui/cat.png`.
-
-## Publish to Modrinth
-
-1. Create the project on modrinth.com (icon: `modrinth/icon.png`, description: `modrinth/description.md`, license MIT, client-side only).
-2. Upload `build/libs/pickupcat-1.3.1+26.2.jar` manually, **or** use the included GitHub Action: add the repo variable `MODRINTH_ID` and secret `MODRINTH_TOKEN`, then publish a GitHub release.
 
 ## Dye colours
 
