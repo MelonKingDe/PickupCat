@@ -34,8 +34,10 @@ public final class CatConfig {
 	/** 1.0 = normal. The cat also speeds up on its own when many items are queued. */
 	public float animationSpeed = 1.0f;
 	public int maxQueue = 40;
-	/** Dropping a dye makes the cat fall down and throw a party with it. */
+	/** Receiving a dye makes the cat fall down and throw a party with it. */
 	public boolean dyeParty = true;
+	/** Where the cat lands during the party: GUI pixels above the bottom edge of the screen (raise it to clear your HUD). */
+	public int partyHeight = 120;
 	/** Speech bubbles: random reactions and chatter. */
 	public boolean speech = true;
 	/** Seconds without eating before the cat says it is hungry (repeats, getting more dramatic). */
@@ -129,6 +131,7 @@ public final class CatConfig {
 		chatterSeconds = o.chatterSeconds;
 		eatFromGuis = o.eatFromGuis;
 		dyeParty = o.dyeParty;
+		partyHeight = o.partyHeight;
 	}
 
 	private void sanitize() {
@@ -137,6 +140,7 @@ public final class CatConfig {
 		logSeconds = Math.max(1f, Math.min(30f, logSeconds));
 		animationSpeed = Math.max(0.25f, Math.min(3f, animationSpeed));
 		maxQueue = Math.max(5, Math.min(200, maxQueue));
+		partyHeight = Math.max(0, Math.min(600, partyHeight));
 		hungryAfterSeconds = Math.max(10f, Math.min(600f, hungryAfterSeconds));
 		chatterSeconds = chatterSeconds <= 0f ? 0f : Math.max(20f, Math.min(600f, chatterSeconds));
 	}

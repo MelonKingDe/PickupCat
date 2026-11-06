@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.1
+- The dye party now starts when you *receive* a dye, not when you drop it (dropping a dye is a normal throw-up again)
+- The cat lands higher during the party (new option `partyHeight`, default 120 GUI px above the bottom edge)
+
 ## 1.3.0
 - Dye party: dropping a dye makes the cat fall down, wear a party hat in the dye's colour and throw a confetti party with the dye, then climb back up (`dyeParty` option)
 

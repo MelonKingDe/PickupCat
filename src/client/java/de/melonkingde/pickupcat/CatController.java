@@ -121,10 +121,10 @@ final class CatController {
 		if (sample == null || count <= 0) {
 			return;
 		}
-		if (kind == Kind.VOMIT && cfg.dyeParty && DyeColors.isDye(key)) {
-			kind = Kind.PARTY;
+		if (kind == Kind.EAT && cfg.dyeParty && DyeColors.isDye(key)) {
+			kind = Kind.PARTY; // receiving a dye = party (dropping one is just a normal throw-up)
 		}
-		if (kind == Kind.EAT) {
+		if (kind == Kind.EAT || kind == Kind.PARTY) {
 			hungryTimer = 0f;
 			hungryStage = 0;
 		}
@@ -403,7 +403,7 @@ final class CatController {
 		float yOff = 0f;
 		if (party) {
 			angle = 0f;
-			float fallDist = Math.max(0f, guiH - 48f - FRAME_H * s - pivotY);
+			float fallDist = Math.max(0f, guiH - cfg.partyHeight - FRAME_H * s - pivotY);
 			if (t < PARTY_FALL) {
 				float p = t / PARTY_FALL;
 				yOff = fallDist * p * p;
@@ -622,7 +622,7 @@ final class CatController {
 			}
 			int alpha = Math.max(5, (int) (a * 255f));
 			boolean eat = l.kind == Kind.EAT;
-			MutableComponent line = Component.literal((eat ? "+" : "-") + l.count + "x ")
+			MutableComponent line = Component.literal(((eat || l.kind == Kind.PARTY) ? "+" : "-") + l.count + "x ")
 					.withStyle(eat ? ChatFormatting.GREEN : (l.kind == Kind.PARTY ? ChatFormatting.LIGHT_PURPLE : ChatFormatting.RED));
 			line.append(l.stack.getHoverName());
 			int w = font.width(line);
