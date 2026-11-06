@@ -19,7 +19,7 @@ import java.util.Random;
 
 /** Animation state machine + HUD rendering of the hanging cat. */
 final class CatController {
-	enum Kind { EAT, VOMIT }
+	enum Kind { EAT, VOMIT, PARTY }
 
 	private static final class Event {
 		final Kind kind;
@@ -70,6 +70,16 @@ final class CatController {
 	private static final float EAT_DUR = 1.15f;
 	private static final float VOMIT_RETCH = 0.70f;
 	private static final float VOMIT_DUR = 1.50f;
+	private static final float PARTY_FALL = 0.75f;      // cat drops to the bottom of the screen
+	private static final float PARTY_LAND = 0.95f;      // landing bounce ends
+	private static final float PARTY_DANCE_END = 5.0f;  // then the cat climbs back up
+	private static final float PARTY_DUR = 6.0f;
+
+	private static final class Confetti {
+		float x, y, vx, vy, age, life, phase;
+		int size;
+		int rgb;
+	}
 
 	private final CatConfig cfg;
 	private final ArrayDeque<Event> queue = new ArrayDeque<>();
@@ -95,6 +105,12 @@ final class CatController {
 	private float greetDelay = -1f;
 	private ClientLevel lastLevel;
 
+	// dye party
+	private final List<Confetti> confetti = new ArrayList<>();
+	private int[] partyPalette = {0xE0405A, 0xFFD23F, 0x3FA7FF};
+	private boolean pendingBurst;
+	private float rainAcc;
+
 	CatController(CatConfig cfg) {
 		this.cfg = cfg;
 	}
@@ -104,6 +120,9 @@ final class CatController {
 	void enqueue(Kind kind, String key, int count, ItemStack sample) {
 		if (sample == null || count <= 0) {
 			return;
+		}
+		if (kind == Kind.VOMIT && cfg.dyeParty && DyeColors.isDye(key)) {
+			kind = Kind.PARTY;
 		}
 		if (kind == Kind.EAT) {
 			hungryTimer = 0f;
@@ -152,6 +171,9 @@ final class CatController {
 				t = 0f;
 				logged = false;
 				side = -side;
+				if (current.kind == Kind.PARTY) {
+					partyPalette = DyeColors.palette(current.key, rng);
+				}
 			}
 		}
 		if (current == null) {
@@ -159,13 +181,16 @@ final class CatController {
 		}
 		float speed = cfg.animationSpeed * Math.min(4f, 1f + 0.35f * queue.size());
 		t += dt * speed;
-		float swallow = current.kind == Kind.EAT ? EAT_FLY : VOMIT_RETCH;
+		float swallow = current.kind == Kind.EAT ? EAT_FLY : (current.kind == Kind.PARTY ? PARTY_FALL : VOMIT_RETCH);
 		if (!logged && t >= swallow) {
 			logged = true;
 			addLog(current.kind, current.key, current.count, current.stack);
 			react(current);
+			if (current.kind == Kind.PARTY) {
+				pendingBurst = true;
+			}
 		}
-		float dur = current.kind == Kind.EAT ? EAT_DUR : VOMIT_DUR;
+		float dur = current.kind == Kind.EAT ? EAT_DUR : (current.kind == Kind.PARTY ? PARTY_DUR : VOMIT_DUR);
 		if (t >= dur) {
 			if (!logged) {
 				addLog(current.kind, current.key, current.count, current.stack);
@@ -201,7 +226,9 @@ final class CatController {
 		if (!cfg.speech) {
 			return;
 		}
-		if (e.kind == Kind.VOMIT) {
+		if (e.kind == Kind.PARTY) {
+			say(fmt(CatSpeech.pick(CatSpeech.PARTY, rng), e), true);
+		} else if (e.kind == Kind.VOMIT) {
 			say(fmt(CatSpeech.pick(CatSpeech.VOMIT, rng), e), true);
 		} else if (e.count >= 32) {
 			say(fmt(CatSpeech.pick(CatSpeech.EAT_BIG, rng), e), true);
@@ -209,6 +236,12 @@ final class CatController {
 			String[] pool = rng.nextBoolean() ? CatSpeech.EAT_ITEM : CatSpeech.EAT_SHORT;
 			say(fmt(CatSpeech.pick(pool, rng), e), false);
 		}
+	}
+
+	/** Called when the player resized the cat with the keybinds. */
+	void onResized(boolean bigger, boolean atLimit) {
+		String[] pool = atLimit ? CatSpeech.LIMIT : (bigger ? CatSpeech.BIGGER : CatSpeech.SMALLER);
+		say(CatSpeech.pick(pool, rng), true);
 	}
 
 	private float nextChatter() {
@@ -261,7 +294,7 @@ final class CatController {
 		}
 	}
 
-	private void drawBubble(GuiGraphicsExtractor g, Minecraft mc, float pivotX, float pivotY, int s) {
+	private void drawBubble(GuiGraphicsExtractor g, Minecraft mc, float pivotX, float pivotY, float s) {
 		if (bubble == null) {
 			return;
 		}
@@ -325,6 +358,15 @@ final class CatController {
 			}
 			return HAPPY;
 		}
+		if (current.kind == Kind.PARTY) {
+			if (t < PARTY_FALL) {
+				return OPEN;
+			}
+			if (t < PARTY_DANCE_END) {
+				return ((int) (t * 5f) % 2 == 0) ? HAPPY : CHEW_A;
+			}
+			return HAPPY;
+		}
 		if (t < VOMIT_RETCH) {
 			return ((int) (t / 0.12f) % 2 == 0) ? RETCH_A : RETCH_B;
 		}
@@ -346,30 +388,172 @@ final class CatController {
 		advance(dt);
 		updateSpeech(dt, mc);
 
-		int s = cfg.scale;
-		float pivotX = mc.getWindow().getGuiScaledWidth() / 2f + cfg.offsetX;
+		float s = cfg.scale;
+		int guiW = mc.getWindow().getGuiScaledWidth();
+		int guiH = mc.getWindow().getGuiScaledHeight();
+		float pivotX = guiW / 2f + cfg.offsetX;
 		float pivotY = cfg.offsetY;
 		int frame = pickFrame();
 		float angle = cfg.sway ? (float) Math.sin(clock * 1.7f) * 0.035f : 0f;
 		float shake = (current != null && current.kind == Kind.VOMIT && t < VOMIT_RETCH)
 				? (float) Math.sin(t * 70f) * 0.9f : 0f;
 
+		// dye party: the cat lets go, falls to the bottom, dances, then climbs back up
+		boolean party = current != null && current.kind == Kind.PARTY;
+		float yOff = 0f;
+		if (party) {
+			angle = 0f;
+			float fallDist = Math.max(0f, guiH - 48f - FRAME_H * s - pivotY);
+			if (t < PARTY_FALL) {
+				float p = t / PARTY_FALL;
+				yOff = fallDist * p * p;
+			} else if (t < PARTY_LAND) {
+				float p = (t - PARTY_FALL) / (PARTY_LAND - PARTY_FALL);
+				yOff = fallDist - (float) Math.sin(Math.PI * p) * 5f * s;
+			} else if (t < PARTY_DANCE_END) {
+				float amp = Math.min(1f, (t - PARTY_LAND) / 0.3f) * Math.min(1f, (PARTY_DANCE_END - t) / 0.3f);
+				float wave = (float) Math.sin(clock * 7f);
+				yOff = fallDist - Math.abs(wave) * 6f * s * amp;
+				angle = wave * 0.12f * amp;
+			} else {
+				float p = Math.min(1f, (t - PARTY_DANCE_END) / (PARTY_DUR - PARTY_DANCE_END));
+				float e = p * p * (3f - 2f * p);
+				yOff = fallDist * (1f - e);
+			}
+		}
+
 		var pose = g.pose();
 		pose.pushMatrix();
-		pose.translate(pivotX, pivotY);
-		pose.rotate(angle);
-		pose.scale((float) s, (float) s);
-		pose.translate(-FRAME_W / 2f + shake, 0f);
+		if (party) {
+			// rotate around the feet while it is dancing
+			pose.translate(pivotX, pivotY + yOff + FRAME_H * s);
+			pose.rotate(angle);
+			pose.scale(s, s);
+			pose.translate(-FRAME_W / 2f, -(float) FRAME_H);
+		} else {
+			pose.translate(pivotX, pivotY);
+			pose.rotate(angle);
+			pose.scale(s, s);
+			pose.translate(-FRAME_W / 2f + shake, 0f);
+		}
 		float u = (frame % COLS) * FRAME_W;
 		float v = (frame / COLS) * FRAME_H;
 		g.blit(RenderPipelines.GUI_TEXTURED, TEXTURE, 0, 0, u, v, FRAME_W, FRAME_H, SHEET_W, SHEET_H);
 		drawFlyingItem(g);
+		drawPartyHat(g);
 		pose.popMatrix();
 
-		drawBubble(g, mc, pivotX, pivotY, s);
+		// confetti
+		if (pendingBurst) {
+			pendingBurst = false;
+			spawnBurst(pivotX, pivotY + yOff + FRAME_H * s * 0.45f);
+		}
+		if (party && t >= PARTY_FALL && t < PARTY_DANCE_END) {
+			rainAcc += dt * 55f;
+			while (rainAcc >= 1f) {
+				rainAcc -= 1f;
+				spawnRain(pivotX, s);
+			}
+		} else {
+			rainAcc = 0f;
+		}
+		updateConfetti(dt, guiH);
+		drawConfetti(g);
+
+		drawBubble(g, mc, pivotX, pivotY + yOff, s);
 		if (cfg.showLog && cfg.logLines > 0) {
 			drawLog(g, mc, pivotX, pivotY + (FRAME_H + 3) * s);
 		}
+	}
+
+	// ------------------------------------------------------------- dye party
+
+	private int confettiColor() {
+		if (rng.nextFloat() < 0.12f) {
+			return 0xFFFFFF;
+		}
+		return partyPalette[rng.nextInt(partyPalette.length)];
+	}
+
+	private void spawnBurst(float cx, float cy) {
+		for (int i = 0; i < 70 && confetti.size() < 500; i++) {
+			Confetti c = new Confetti();
+			c.x = cx + (rng.nextFloat() - 0.5f) * 10f;
+			c.y = cy;
+			double ang = -Math.PI / 2 + (rng.nextFloat() - 0.5f) * 2.8f;
+			float sp = 70f + rng.nextFloat() * 170f;
+			c.vx = (float) Math.cos(ang) * sp;
+			c.vy = (float) Math.sin(ang) * sp;
+			c.life = 2.2f + rng.nextFloat() * 1.4f;
+			c.phase = rng.nextFloat() * 6.28f;
+			c.size = 2 + rng.nextInt(2);
+			c.rgb = confettiColor();
+			confetti.add(c);
+		}
+	}
+
+	private void spawnRain(float cx, float s) {
+		if (confetti.size() >= 500) {
+			return;
+		}
+		Confetti c = new Confetti();
+		c.x = cx + (rng.nextFloat() * 2f - 1f) * (110f + 30f * s);
+		c.y = -4f;
+		c.vx = (rng.nextFloat() - 0.5f) * 30f;
+		c.vy = 30f + rng.nextFloat() * 40f;
+		c.life = 4.5f + rng.nextFloat() * 2f;
+		c.phase = rng.nextFloat() * 6.28f;
+		c.size = 2 + rng.nextInt(2);
+		c.rgb = confettiColor();
+		confetti.add(c);
+	}
+
+	private void updateConfetti(float dt, int guiH) {
+		for (int i = confetti.size() - 1; i >= 0; i--) {
+			Confetti c = confetti.get(i);
+			c.age += dt;
+			c.vy = Math.min(c.vy + 150f * dt, 85f);
+			c.vx *= Math.max(0f, 1f - 1.4f * dt);
+			c.x += (c.vx + (float) Math.sin(c.age * 7f + c.phase) * 14f) * dt;
+			c.y += c.vy * dt;
+			if (c.age >= c.life || c.y > guiH + 4) {
+				confetti.remove(i);
+			}
+		}
+	}
+
+	private void drawConfetti(GuiGraphicsExtractor g) {
+		for (Confetti c : confetti) {
+			float left = c.life - c.age;
+			int alpha = left < 0.5f ? Math.max(5, (int) (left / 0.5f * 255f)) : 255;
+			int w = c.size;
+			int h = 1 + Math.round(Math.abs((float) Math.sin(c.age * 9f + c.phase)) * c.size);
+			int x = Math.round(c.x);
+			int y = Math.round(c.y);
+			g.fill(x, y, x + w, y + h, (alpha << 24) | c.rgb);
+		}
+	}
+
+	/** Party hat in the dye's colour (drawn in sprite space, so it scales with the cat). */
+	private void drawPartyHat(GuiGraphicsExtractor g) {
+		if (current == null || current.kind != Kind.PARTY || t < PARTY_FALL || t > PARTY_DUR - 0.5f) {
+			return;
+		}
+		int main = 0xFF000000 | partyPalette[0];
+		int dark = 0xFF000000 | DyeColors.shade(partyPalette[0], 0.7f);
+		int out = 0xFF3B2418;
+		int white = 0xFFFFFFFF;
+		for (int r = 0; r < 14; r++) {
+			int y = -7 + r;
+			float hw = 0.8f + r * 0.4f;
+			int x0 = Math.round(16f - hw);
+			int x1 = Math.round(16f + hw);
+			g.fill(x0 - 1, y, x1 + 1, y + 1, out);
+			g.fill(x0, y, x1, y + 1, ((r / 3) % 2 == 0) ? main : dark);
+		}
+		g.fill(9, 7, 23, 8, out);
+		g.fill(14, -10, 18, -6, out);
+		g.fill(15, -9, 17, -7, white);
 	}
 
 	private void drawFlyingItem(GuiGraphicsExtractor g) {
@@ -387,6 +571,16 @@ final class CatController {
 			float x = sx + (MOUTH_X - sx) * e;
 			float y = sy + (MOUTH_Y - 3f - sy) * e - (float) Math.sin(Math.PI * p) * 12f;
 			drawItem(g, current.stack, x, y, ITEM_SCALE * (1f - 0.55f * e), 0f);
+		} else if (current.kind == Kind.PARTY) {
+			float tp = t - PARTY_FALL;
+			if (tp < 0f) {
+				return;
+			}
+			float pop = Math.min(1f, tp / 0.25f);
+			pop = pop * pop * (3f - 2f * pop);
+			float out = 1f - Math.max(0f, Math.min(1f, (t - PARTY_DANCE_END) / 0.4f));
+			float bob = (float) Math.sin(clock * 6f) * 3f;
+			drawItem(g, current.stack, -16f, 14f + bob, ITEM_SCALE * 1.8f * pop * out, (float) Math.sin(clock * 5f) * 0.35f);
 		} else {
 			float tv = t - VOMIT_RETCH;
 			if (tv < 0f || tv > 0.8f) {
@@ -429,7 +623,7 @@ final class CatController {
 			int alpha = Math.max(5, (int) (a * 255f));
 			boolean eat = l.kind == Kind.EAT;
 			MutableComponent line = Component.literal((eat ? "+" : "-") + l.count + "x ")
-					.withStyle(eat ? ChatFormatting.GREEN : ChatFormatting.RED);
+					.withStyle(eat ? ChatFormatting.GREEN : (l.kind == Kind.PARTY ? ChatFormatting.LIGHT_PURPLE : ChatFormatting.RED));
 			line.append(l.stack.getHoverName());
 			int w = font.width(line);
 			int x = Math.round(centerX - w / 2f);

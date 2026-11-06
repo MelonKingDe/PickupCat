@@ -41,6 +41,23 @@ final class CatSpeech {
 			"meow! any snacks?", "hi again!", "ready to snack", "oh, a new place! snacks?",
 	};
 
+	static final String[] PARTY = {
+			"PARTY TIME!!", "{item} party!!", "woohoo!!", "everybody dance!", "this calls for confetti!",
+			"dye-licious!", "best. drop. ever.",
+	};
+
+	static final String[] BIGGER = {
+			"i feel majestic", "growing...", "a mighty cat!", "bigger = more snacks",
+	};
+
+	static final String[] SMALLER = {
+			"i'm shrinking!", "tiny cat mode", "cozy size", "now i'm pocket sized",
+	};
+
+	static final String[] LIMIT = {
+			"that's as far as i go", "i can't change any more!",
+	};
+
 	static final String[] CHATTER = {
 			"is it bazaar flip o'clock?",
 			"don't forget your booster cookie",

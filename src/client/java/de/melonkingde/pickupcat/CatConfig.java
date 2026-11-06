@@ -20,8 +20,8 @@ public final class CatConfig {
 	public boolean enabled = true;
 	/** Only show the cat while connected to a *.hypixel.net server. */
 	public boolean onlyOnHypixel = false;
-	/** Integer pixel scale of the cat sprite (1-4). */
-	public int scale = 1;
+	/** Size of the cat (0.5 - 6). Whole numbers (1, 2, 3) look the crispest. Also changeable in-game with the resize keys. */
+	public float scale = 1f;
 	/** Shift the cat horizontally / vertically (GUI pixels). */
 	public int offsetX = 0;
 	public int offsetY = 0;
@@ -34,6 +34,8 @@ public final class CatConfig {
 	/** 1.0 = normal. The cat also speeds up on its own when many items are queued. */
 	public float animationSpeed = 1.0f;
 	public int maxQueue = 40;
+	/** Dropping a dye makes the cat fall down and throw a party with it. */
+	public boolean dyeParty = true;
 	/** Speech bubbles: random reactions and chatter. */
 	public boolean speech = true;
 	/** Seconds without eating before the cat says it is hungry (repeats, getting more dramatic). */
@@ -57,16 +59,80 @@ public final class CatConfig {
 			}
 		}
 		cfg.sanitize();
-		try (Writer writer = Files.newBufferedWriter(path)) {
-			GSON.toJson(cfg, writer);
-		} catch (Exception e) {
-			LOGGER.warn("[PickupCat] Could not write config", e);
-		}
+		cfg.save();
 		return cfg;
 	}
 
+	private static Path path() {
+		return FabricLoader.getInstance().getConfigDir().resolve("pickupcat.json");
+	}
+
+	private static long mtime(Path path) {
+		try {
+			return Files.getLastModifiedTime(path).toMillis();
+		} catch (Exception e) {
+			return 0L;
+		}
+	}
+
+	private transient long lastModified;
+	private transient int pollCounter;
+
+	/** Writes the config to disk. */
+	void save() {
+		Path path = path();
+		try (Writer writer = Files.newBufferedWriter(path)) {
+			GSON.toJson(this, writer);
+		} catch (Exception e) {
+			LOGGER.warn("[PickupCat] Could not write config", e);
+		}
+		lastModified = mtime(path);
+	}
+
+	/** Every ~2 seconds: if the file was edited, apply the changes live (no restart needed). */
+	void pollReload() {
+		if (++pollCounter < 40) {
+			return;
+		}
+		pollCounter = 0;
+		Path path = path();
+		long m = mtime(path);
+		if (m == 0L || m == lastModified) {
+			return;
+		}
+		lastModified = m;
+		try (Reader reader = Files.newBufferedReader(path)) {
+			CatConfig loaded = GSON.fromJson(reader, CatConfig.class);
+			if (loaded != null) {
+				copyFrom(loaded);
+				sanitize();
+			}
+		} catch (Exception e) {
+			LOGGER.warn("[PickupCat] Could not reload config", e);
+		}
+	}
+
+	private void copyFrom(CatConfig o) {
+		enabled = o.enabled;
+		onlyOnHypixel = o.onlyOnHypixel;
+		scale = o.scale;
+		offsetX = o.offsetX;
+		offsetY = o.offsetY;
+		sway = o.sway;
+		showLog = o.showLog;
+		logLines = o.logLines;
+		logSeconds = o.logSeconds;
+		animationSpeed = o.animationSpeed;
+		maxQueue = o.maxQueue;
+		speech = o.speech;
+		hungryAfterSeconds = o.hungryAfterSeconds;
+		chatterSeconds = o.chatterSeconds;
+		eatFromGuis = o.eatFromGuis;
+		dyeParty = o.dyeParty;
+	}
+
 	private void sanitize() {
-		scale = Math.max(1, Math.min(4, scale));
+		scale = Math.max(0.5f, Math.min(6f, scale));
 		logLines = Math.max(0, Math.min(10, logLines));
 		logSeconds = Math.max(1f, Math.min(30f, logSeconds));
 		animationSpeed = Math.max(0.25f, Math.min(3f, animationSpeed));
